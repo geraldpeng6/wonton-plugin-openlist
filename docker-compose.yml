@@ -1,78 +1,103 @@
-# 示例插件：nginx 显示一个网页，向登录的人问好。改成自己的应用见 https://github.com/geraldpeng6/wonton-docs/blob/main/develop.md#写插件。
+# OpenList：聚合挂载各家网盘，经云吞网关单点登录打开。
 services:
-  web:
-    # 镜像按摘要固定（多架构镜像写清单列表的摘要），标签只给人看。
-    image: nginx:1.31.7-alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d
+  openlist:
+    # 上游官方镜像（AGPL-3.0），按多架构清单摘要固定，标签只给人看。
+    image: openlistteam/openlist:v4.2.9@sha256:897563beb674e7ad04edff14b0037dc8443ca3978570614005519df7eae06434
+    # 镜像固定以 openlist（uid 1001）运行、不支持 PUID/PGID，数据目录属主按它给。
+    user: "1001:1001"
+    volumes:
+      # 配置、SQLite 数据库、日志都放数据目录，容器重建后还在。
+      - ${WONTON_APP_DATA}:/opt/openlist/data
     environment:
-      # 网关代登录：SSI 回显的 Remote-User 只信核心带来的。官方镜像启动时对 templates 目录里的
-      # *.template 做 envsubst，把下面的地址换进 nginx 配置（见 web/default.conf.template）。
-      WONTON_CORE_ADDRESS: ${WONTON_CORE_ADDRESS}
-    # 包里的文件经 configs 交给容器（核心在启动前写进去），不能用卷挂载。
-    configs:
-      - source: site
-        target: /etc/nginx/templates/default.conf.template
-      - source: page
-        target: /usr/share/nginx/html/index.html
-      - source: tokens
-        target: /usr/share/nginx/html/tokens.css
+      TZ: ${TZ}
+      # 网关重设 X-Forwarded-*，但 site_url 决定 OIDC 的 redirect_uri，必须整串等于核心登记值。
+      SITE_URL: ${WONTON_APP_URL}
+      # 首次启动直接建管理员账号（跳过网页初始化向导），密码用核心生成的密钥。
+      OPENLIST_ADMIN_PASSWORD: ${WONTON_SECRET_ADMIN_PASSWORD}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      # /api/public/settings 在存储加载完成后才放行（server/middlewares/check.go），
+      # 能答 200 说明 HTTP、数据库和存储加载都就绪，不只是进程活着。
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "-T", "10", "http://127.0.0.1:5244/api/public/settings"]
       interval: 30s
-      timeout: 5s
-      start_period: 30s
-      start_interval: 1s
+      timeout: 15s
+      start_period: 60s
+      start_interval: 2s
+
+  init-sso:
+    # 一次性服务：把 SSO 配置写进应用的数据库设置（OpenList 的 SSO 设置只能经管理 API 改），
+    # 并把 owner 的 OIDC 身份绑到内置管理员账号。每次创建容器都重跑，全部幂等。
+    image: curlimages/curl:8.17.0@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
+    entrypoint: ["/bin/sh", "/init-sso.sh"]
+    environment:
+      WONTON_OWNER_NAME: ${WONTON_OWNER_NAME}
+      WONTON_SECRET_ADMIN_PASSWORD: ${WONTON_SECRET_ADMIN_PASSWORD}
+      WONTON_OIDC_ISSUER: ${WONTON_OIDC_ISSUER}
+      WONTON_OIDC_CLIENT_ID: ${WONTON_OIDC_CLIENT_ID}
+      WONTON_OIDC_CLIENT_SECRET: ${WONTON_OIDC_CLIENT_SECRET}
+    configs:
+      - source: init-sso
+        target: /init-sso.sh
+        mode: 0555
+    depends_on:
+      openlist:
+        condition: service_healthy
+    restart: "no"
 
 configs:
-  site:
-    file: web/default.conf.template
-  page:
-    file: web/index.html
-  tokens:
-    file: web/tokens.css
+  init-sso:
+    file: init-sso.sh
 
 x-wonton:
-  spec: "0.5"
-  # 换成你自己的：反向域名形式，装上以后不能改。
-  id: app.example.hello
-  version: 0.1.1
+  spec: "0.6"
+  id: app.openlist.drive
+  version: 0.1.0
   kind: app
-  title: { zh: 你好, en: Hello }
-  description: { zh: 向登录的人问好的示例网页, en: An example page that greets whoever is signed in }
+  title: { en: OpenList }
+  description:
+    zh: 把各家网盘聚合挂载到一个网页，浏览、播放、上传下载
+    en: Mount your cloud drives into one web page to browse, stream, upload and download
   icon: icon.svg
   notices: [NOTICE]
-  screenshots: [screenshots/home.png]
-  author: { name: Example }
-  homepage: https://nginx.org
-  # 应用（这里是 nginx）的许可证；插件包自己的许可证写在仓库的 LICENSE 里。
-  license: BSD-2-Clause
+  screenshots: [screenshots/login.png, screenshots/files.png, screenshots/manage.png]
+  author: { name: geraldpeng6, url: "https://github.com/geraldpeng6" }
+  homepage: https://openlist.org
+  # 上游 OpenList 的许可证；插件包自己的许可证在仓库 LICENSE 里。
+  license: AGPL-3.0-only
   tags:
-    zh: [工具]
-    en: [Tools]
+    zh: [文件, 网盘]
+    en: [Files, Cloud drives]
   about:
     zh: |
-      一个示例网页：登录以后，页面会向你问好。新建插件时可以照着改。
+      把阿里云盘、夸克、百度网盘这些网盘挂到同一个网页里：浏览、在线播放、上传下载、离线下载都在一个界面。
+
+      打开就是你自己的管理员账号，不用再记一个密码；网盘账号在家里添加，数据不经过任何第三方服务器。
+
+      与 Alist 的关系：OpenList 是 Alist v3 的社区延续分支，由原社区在 Alist 项目易主后继续维护。
     en: |
-      An example page: once you are signed in, the page says hello. Copy it as a starting point for a new plugin.
-  release_notes: { zh: 名字和说明更新。, en: Product name and description update. }
+      Mount cloud drives such as Aliyun Drive, Quark and Baidu Netdisk into one web page: browse, stream, upload, download and fetch offline files in a single interface.
+
+      It opens straight into your own admin account, with no extra password. Drive accounts are added at home, and your data goes through no third-party server.
+
+      Relationship to Alist: OpenList is the community continuation fork of Alist v3, maintained by the original community after the Alist project changed hands.
+  release_notes: { zh: 首个版本。, en: First release. }
   webui:
-    service: web
-    port: 80
-    # 示例页回显网关注入的用户名，见 https://github.com/geraldpeng6/wonton-docs/blob/main/plugin-spec.md#网关代登录sso-proxy。
-    sso: proxy
-    proxy:
-      headers:
-        Remote-User: "{user}"
-  # 能放到底栏的页面，见 https://github.com/geraldpeng6/wonton-docs/blob/main/plugin-spec.md#底栏页面tabs。放不放由用户决定。
-  tabs:
-    - id: home
-      title: { zh: 主页, en: Home }
-      icon: tabs/home.svg
-      icon_selected: tabs/home-fill.svg
-      path: /
-      # 这个页面没做适配，用默认的 inset：页面夹在 App 的栏中间，不会被挡。
-      # 想让内容从栏下滚过，写 layout: edge-to-edge，并用 --wonton-inset-* 留出栏的位置。
-  permissions: []
-  # 上游 nginx 官方镜像，amd64 和 arm64 都有；上游没写最低内存，按本机空闲实测取整（实测约 24M，取 64M）。
+    service: openlist
+    port: 5244
+    # 直接落在 SSO 起点：顶级跳转到身份提供方，回来后经 /@login?token= 进文件页，不再看到登录页。
+    path: /api/auth/sso?method=sso_get_token
+    sso: oidc
+    # SSO 兼容模式（sso_compatibility_mode）下回调是固定路径，没有查询串。
+    oidc:
+      redirect_paths: [/api/auth/sso_get_token]
+      token_endpoint_auth_method: client_secret_basic
+  permissions:
+    - network.egress
+    - owner.identity
+  # 管理员密码：首次启动经 OPENLIST_ADMIN_PASSWORD 建号，init-sso 用它登录管理接口写 SSO 配置。
+  secrets:
+    admin_password:
+      generate: { bytes: 24 }
+  # 上游没写最低内存；本机空闲实测见 PR 验证一节。镜像多架构（docker buildx imagetools inspect）。
   requirements:
     arch: [amd64, arm64]
-    memory: 64M
+    memory: 256M
