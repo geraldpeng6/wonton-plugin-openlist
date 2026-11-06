@@ -49,8 +49,10 @@ import json, sys
 me = json.loads(sys.argv[1])
 assert me.get("code") == 200, me
 data = me.get("data") or {}
-assert data.get("username") == sys.argv[2], f"username={data.get('username')!r} 不是 {sys.argv[2]!r}"
+# owner 的 SSO 身份绑在内置 admin 账号上：认出的用户必须是管理员（role=2），
+# 且 sso_id 是 owner 的用户名（证明这条登录链就是 owner 的身份，不是别的账号）。
 assert data.get("role") == 2, f"role={data.get('role')!r} 不是管理员"
+assert data.get("sso_id") == sys.argv[2], f"sso_id={data.get('sso_id')!r} 不是 {sys.argv[2]!r}（绑定没生效）"
 PY
 }
 
