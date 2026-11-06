@@ -71,11 +71,14 @@ say "SSO 设置已写入（平台 OIDC、兼容模式、自动注册）"
 # ---- 3. 把 owner 的 OIDC 身份绑到内置管理员账号（id=1，即首启第一个建号的用户） ----
 user_json="$(authed GET "/admin/user/get?id=1")"
 echo "$user_json" | grep -q '"code":200' || die "读取管理员用户失败：$user_json"
-echo "$user_json" | grep -q '"username":"admin"' || die "id=1 不是 admin，绑定中止：$user_json"
-if echo "$user_json" | grep -q "\"sso_id\":\"$WONTON_OWNER_NAME\""; then
+# 回传的要是 data 里的用户对象本身（信封里有 code/message，顶层没有 username，直接回传会被 required 校验拒掉）。
+user_obj="$(echo "$user_json" | sed -n 's/.*"data":\({.*\)\}/\1/p')"
+[ -n "$user_obj" ] || die "响应里没有 data 对象：$user_json"
+echo "$user_obj" | grep -q '"username":"admin"' || die "id=1 不是 admin，绑定中止：$user_obj"
+if echo "$user_obj" | grep -q "\"sso_id\":\"$WONTON_OWNER_NAME\""; then
   say "管理员已绑定 owner 身份（sso_id=$WONTON_OWNER_NAME），跳过"
 else
-  bound="$(echo "$user_json" | sed 's/"sso_id":"[^"]*"/"sso_id":"'"$WONTON_OWNER_NAME"'"/')"
+  bound="$(echo "$user_obj" | sed 's/"sso_id":"[^"]*"/"sso_id":"'"$WONTON_OWNER_NAME"'"/')"
   updated="$(authed POST /admin/user/update "$bound")"
   echo "$updated" | grep -q '"code":200' || die "绑定 owner 身份失败：$updated"
   say "已把 owner（$WONTON_OWNER_NAME）绑定为管理员账号"
