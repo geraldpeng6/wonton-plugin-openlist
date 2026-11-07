@@ -1,31 +1,29 @@
-# 云吞插件模板
+# 云吞插件：OpenList
 
-开发流程见[插件开发指南](https://github.com/geraldpeng6/wonton-docs/blob/main/develop.md)。
+把 [OpenList](https://github.com/OpenListTeam/OpenList) 做成[云吞](https://github.com/geraldpeng6/wonton-docs)插件：经云吞网关单点登录打开，把各家网盘（阿里云盘、夸克、百度网盘等）聚合挂载到一个网页，浏览、在线播放、上传下载、离线下载都在一个界面。
 
-这是一个能安装的示例插件 `app.example.hello`：使用 nginx 官方镜像显示问候页，经网关的 `sso: proxy` 注入用户名，页面显示“你好，<用户名>”。示例没有应用账号、持久化数据或 MCP 工具。
+## 和 Alist 的关系
 
-## 示例文件
+OpenList 是 **Alist v3 的社区延续分支**。2025 年 6 月 Alist 项目易主引发社区争议后，原社区以 OpenList 的名义继续维护同一套代码（fork 自 Alist v3，上游 https://github.com/OpenListTeam/OpenList ，AGPL-3.0），Alist 原仓库的高风险改动不再进入这条线。本插件封装的是 OpenList，不是 Alist；从 Alist 迁移过来的用户可以直接用 OpenList 的导入功能，插件 README 不再重复。
 
-| 路径 | 内容 |
-| --- | --- |
-| `docker-compose.yml` | 示例清单、nginx 服务和三个 `configs` |
-| `web/default.conf.template` | nginx 配置，启用 SSI 回显用户名并提供健康检查入口；只放行来自核心地址（`${WONTON_CORE_ADDRESS}`）的请求，其余来源 403 |
-| `web/index.html` | 问候页 |
-| `web/tokens.css` | 页面主题变量的后备值 |
-| `tabs/` | 示例主页的底栏图标 |
-| `screenshots/home.png` | 商店详情页的示例截图 |
-| `scripts/smoke-probes.sh` | 检查真实页面和网关注入身份的插件探针 |
+## 怎么工作
 
-从模板创建自己的插件后，替换示例清单、网页和素材；具体步骤见[写插件](https://github.com/geraldpeng6/wonton-docs/blob/main/develop.md#写插件)。
+- 上游官方镜像 `openlistteam/openlist`，按多架构清单摘要固定（amd64、arm64）。
+- 登录走 `sso: oidc`：核心身份提供方登录后，直接落进 OpenList 文件页，不再看到第二个登录页。OpenList 的 SSO 配置存在应用数据库里，由一次性服务 `init-sso` 经应用自己的管理 API 写入（每次容器创建幂等重跑），并把 owner 的身份绑到内置管理员账号。
+- 出网挂载网盘是 OpenList 的核心功能，因此申请 `network.egress`；`owner.identity` 用于把 owner 用户名写进管理员账号的 SSO 绑定。
+- 数据（SQLite、配置、日志）放在插件数据目录，升级、重装保留。
+- 健康检查打 `/api/public/settings`：存储加载完成后才放行的接口，检查的是真正可用。
 
-## 更新开发套件
+## 图标与商标
+
+`icon.svg` 用的是 OpenList 官方标志（来源、许可与商标说明见 [NOTICE](NOTICE)）。
+
+## 开发
+
+开发流程见[插件开发指南](https://github.com/geraldpeng6/wonton-docs/blob/main/develop.md)：
 
 ```bash
-scripts/dev.sh kit-update
+scripts/check.sh --official
+scripts/dev.sh up && scripts/dev.sh install
+scripts/dev.sh probes
 ```
-
-在从模板新建的插件仓库中更新套件；本仓库是套件源头，执行时只提示并退出。版本、可选引用和自定义脚本约定见[开发指南](https://github.com/geraldpeng6/wonton-docs/blob/main/develop.md#更新开发套件)。
-
-## 图标
-
-`icon.svg` 是本仓库原创线条图标，按本仓库 MIT 许可证分发，见 [NOTICE](NOTICE)。
