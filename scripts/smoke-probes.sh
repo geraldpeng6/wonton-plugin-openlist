@@ -24,7 +24,7 @@ ol_api() { # <路径> [curl 参数…]：带会话走网关调 OpenList API；HT
   local path="$1" out code
   shift
   out="$(curl -sS --noproxy '*' --max-time 120 -b "${SMOKE_JAR:-}" -c "${SMOKE_JAR:-}" \
-    -w '\n%{http_code}' "$@" "${_ol_url}$path")" || { echo "请求失败：$out" >&2; return 1; }
+    -w '\n%{http_code}' "$@" "$(_ol_url)$path")" || { echo "请求失败：$out" >&2; return 1; }
   code="${out##*$'\n'}"
   [[ "$code" == 2* ]] || { echo "HTTP $code：$(head -c 300 <<<"${out%$'\n'*}")" >&2; return 1; }
   printf '%s' "${out%$'\n'*}"
