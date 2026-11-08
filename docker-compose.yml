@@ -26,7 +26,7 @@ services:
   init-sso:
     # 一次性服务：把 SSO 配置写进应用的数据库设置（OpenList 的 SSO 设置只能经管理 API 改），
     # 并把 owner 的 OIDC 身份绑到内置管理员账号。每次创建容器都重跑，全部幂等。
-    image: curlimages/curl:8.17.0@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
+    image: curlimages/curl:8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
     entrypoint: ["/bin/sh", "/init-sso.sh"]
     environment:
       WONTON_OWNER_NAME: ${WONTON_OWNER_NAME}
@@ -50,7 +50,7 @@ configs:
 x-wonton:
   spec: "0.6"
   id: app.openlist.drive
-  version: 0.1.0
+  version: 0.1.1
   kind: app
   title: { en: OpenList }
   description:
@@ -79,7 +79,7 @@ x-wonton:
       It opens straight into your own admin account, with no extra password. Drive accounts are added at home, and your data goes through no third-party server.
 
       Relationship to Alist: OpenList is the community continuation fork of Alist v3, maintained by the original community after the Alist project changed hands.
-  release_notes: { zh: 首个版本。, en: First release. }
+  release_notes: { zh: 初始化脚本用的 curl 镜像升到 8.23.0。, en: The init script's helper image curl is upgraded to 8.23.0. }
   webui:
     service: openlist
     port: 5244
