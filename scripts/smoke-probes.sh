@@ -35,7 +35,10 @@ ol_api() { # <路径> [curl 参数…]：带会话走网关调 OpenList API；HT
 
 # 走完 SSO 登录链，输出应用令牌；任何一步拿不到都返回非 0 并把现场打到标准错误。
 sso_token() {
-  local out code final token
+  local out code final token loc
+  loc="$(curl -sS --noproxy '*' -o /dev/null -w '%{redirect_url}' \
+    "$(_ol_url)/api/auth/sso?method=sso_get_token")"
+  echo "SSO 首跳：$loc" >&2
   out="$(curl -sS --noproxy '*' -L --max-redirs 20 --max-time 120 \
     -b "${SMOKE_JAR:-}" -c "${SMOKE_JAR:-}" -o /dev/null -w '%{http_code} %{url_effective}' \
     "$(_ol_url)/api/auth/sso?method=sso_get_token")" ||
