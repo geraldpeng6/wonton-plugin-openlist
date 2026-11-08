@@ -18,7 +18,10 @@ marker_file() {
   if [ -d "$SMOKE_STATE" ]; then printf '%s' "$SMOKE_STATE/data-marker"; else printf '%s' "$SMOKE_STATE"; fi
 }
 
-_ol_url() { printf '%s' "${SMOKE_WEB_URL%/}"; } # 套件给的 web_url 带尾斜杠，拼 API 路径前归一化
+_ol_url() { # web_url 是 SSO 入口（带路径和查询），拼 API 前取 origin
+  local u="${SMOKE_WEB_URL%%\?*}" rest="${SMOKE_WEB_URL#*://}"
+  printf '%s://%s' "${u%%://*}" "${rest%%/*}"
+}
 
 ol_api() { # <路径> [curl 参数…]：带会话走网关调 OpenList API；HTTP 非 2xx 时打印响应体再失败
   local path="$1" out code
