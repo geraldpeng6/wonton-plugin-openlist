@@ -18,11 +18,33 @@ marker_file() {
   if [ -d "$SMOKE_STATE" ]; then printf '%s' "$SMOKE_STATE/data-marker"; else printf '%s' "$SMOKE_STATE"; fi
 }
 
+_ol_url() { # web_url 是 SSO 入口（带路径和查询），拼 API 前取 origin
+  local u="${SMOKE_WEB_URL%%\?*}" rest="${SMOKE_WEB_URL#*://}"
+  printf '%s://%s' "${u%%://*}" "${rest%%/*}"
+}
+
+ol_api() { # <路径> [curl 参数…]：带会话走网关调 OpenList API；HTTP 非 2xx 时打印响应体再失败
+  local path="$1" out code
+  shift
+  out="$(curl -sS --noproxy '*' --max-time 120 -b "${SMOKE_JAR:-}" -c "${SMOKE_JAR:-}" \
+    -w '\n%{http_code}' "$@" "$(_ol_url)$path")" || { echo "请求失败：$out" >&2; return 1; }
+  code="${out##*$'\n'}"
+  [[ "$code" == 2* ]] || { echo "HTTP $code：$(head -c 300 <<<"${out%$'\n'*}")" >&2; return 1; }
+  printf '%s' "${out%$'\n'*}"
+}
+
 # 走完 SSO 登录链，输出应用令牌；任何一步拿不到都返回非 0 并把现场打到标准错误。
 sso_token() {
-  local final token
-  final="$(web_get '/api/auth/sso?method=sso_get_token' -L --max-time 120 -o /dev/null -w '%{url_effective}')" ||
+  local out code final token loc
+  loc="$(curl -sS --noproxy '*' -o /dev/null -w '%{redirect_url}' \
+    "$(_ol_url)/api/auth/sso?method=sso_get_token")"
+  echo "SSO 首跳：$loc" >&2
+  out="$(curl -sS --noproxy '*' -L --max-redirs 20 --max-time 120 \
+    -b "${SMOKE_JAR:-}" -c "${SMOKE_JAR:-}" -o /dev/null -w '%{http_code} %{url_effective}' \
+    "$(_ol_url)/api/auth/sso?method=sso_get_token")" ||
     { echo "SSO 登录链请求失败" >&2; return 1; }
+  code="${out%% *}"; final="${out#* }"
+  [[ "$code" == 200 ]] || { echo "SSO 登录链返回 HTTP $code（OpenList 或身份提供方 5xx 时先看插件容器日志），停在：$final" >&2; return 1; }
   token="$(python3 -c 'import sys, urllib.parse as u
 q = u.parse_qs(u.urlsplit(sys.argv[1]).query)
 print(q.get("token", [""])[0])' "$final")"
@@ -36,8 +58,7 @@ print(q.get("token", [""])[0])' "$final")"
 identity_check() {
   local token me
   token="$(sso_token)" || return 1
-  me="$(web_get '/api/me' --max-time 60 -H "Authorization: $token")" ||
-    { echo "GET /api/me 失败：$me" >&2; return 1; }
+  me="$(ol_api '/api/me' -H "Authorization: $token")" || return 1
   python3 - "$me" "$SMOKE_OWNER" >&2 <<'PY' || { echo "应用认出的不是用户管理员：$me" >&2; return 1; }
 import json, sys
 me = json.loads(sys.argv[1])
@@ -50,26 +71,33 @@ assert data.get("sso_id") == sys.argv[2], f"sso_id={data.get('sso_id')!r} 不是
 PY
 }
 
+# 数据：用户库存 在 OpenList 自己的数据目录里，升级、重装都保留。标记是确定性用户名
+# （wonton-smoke-<实例>），不依赖 SMOKE_STATE 的形态；data_write 先删同名旧标记再建（重跑幂等），
+# data_check 重装后在用户列表里找它。
+ol_marker() { printf 'wonton-smoke-%s' "${SMOKE_INSTANCE:-owner}"; }
+
 data_write() {
-  local token marker resp password
+  local token marker resp id
   token="$(sso_token)" || return 1
-  marker="$(python3 -c 'import secrets; print("smoke-" + secrets.token_hex(6))')"
-  password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
-  resp="$(web_get '/api/admin/user/create' --max-time 60 \
-    -X POST -H "Authorization: $token" -H 'Content-Type: application/json' \
-    -d "{\"username\":\"$marker\",\"password\":\"$password\",\"base_path\":\"/\",\"role\":0,\"permission\":0,\"disabled\":false}")" ||
-    { echo "建标记用户失败：$resp" >&2; return 1; }
+  marker="$(ol_marker)"
+  resp="$(ol_api '/api/admin/user/list?page=1&per_page=100' -H "Authorization: $token")" || return 1
+  id="$(jq -r --arg m "$marker" '.data.content[]? | select(.username == $m) | .id' <<<"$resp" | head -1)"
+  if [ -n "$id" ]; then
+    ol_api '/api/admin/user/delete' -X POST -H "Authorization: $token" -H 'Content-Type: application/json' \
+      -d "{\"id\":$id}" >/dev/null || { echo "删旧标记用户失败" >&2; return 1; }
+  fi
+  marker_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
+  resp="$(ol_api '/api/admin/user/create' -X POST -H "Authorization: $token" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$marker\",\"password\":\"$marker_password\",\"base_path\":\"/\",\"role\":0,\"permission\":0,\"disabled\":false}")" ||
+    { echo "建标记用户失败" >&2; return 1; }
   echo "$resp" | grep -q '"code":200' || { echo "建标记用户被拒：$resp" >&2; return 1; }
-  printf '%s\n' "$marker" >"$(marker_file)"
 }
 
 data_check() {
   local token marker resp
   token="$(sso_token)" || return 1
-  marker="$(tail -1 "$(marker_file)" 2>/dev/null)"
-  [ -n "$marker" ] || { echo "没有 data_write 写下的标记（$(marker_file)）" >&2; return 1; }
-  resp="$(web_get '/api/admin/user/list?page=1&per_page=100' --max-time 60 -H "Authorization: $token")" ||
-    { echo "列用户失败：$resp" >&2; return 1; }
+  marker="$(ol_marker)"
+  resp="$(ol_api '/api/admin/user/list?page=1&per_page=100' -H "Authorization: $token")" || return 1
   echo "$resp" | grep -q "\"username\":\"$marker\"" ||
     { echo "用户列表里没有标记用户 $marker：$(echo "$resp" | head -c 300)" >&2; return 1; }
 }
