@@ -1,6 +1,6 @@
 # 云吞插件：OpenList
 
-把 [OpenList](https://github.com/OpenListTeam/OpenList) 做成[云吞](https://github.com/geraldpeng6/wonton-docs)插件：经云吞网关单点登录打开，把各家网盘（阿里云盘、夸克、百度网盘等）聚合挂载到一个网页，浏览、在线播放、上传下载、离线下载都在一个界面。
+把 [OpenList](https://github.com/OpenListTeam/OpenList) 做成[云吞](https://github.com/wontonapp/wonton-docs)插件：经云吞网关单点登录打开，把各家网盘（阿里云盘、夸克、百度网盘等）聚合挂载到一个网页，浏览、在线播放、上传下载、离线下载都在一个界面。
 
 ## 和 Alist 的关系
 
@@ -20,7 +20,7 @@ OpenList 是 **Alist v3 的社区延续分支**。2025 年 6 月 Alist 项目易
 
 ## 开发
 
-开发流程见[插件开发指南](https://github.com/geraldpeng6/wonton-docs/blob/main/develop.md)：
+开发流程见[插件开发指南](https://github.com/wontonapp/wonton-docs/blob/main/develop.md)：
 
 ```bash
 scripts/check.sh --official
