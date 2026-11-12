@@ -52,10 +52,10 @@ x-wonton:
   id: app.openlist.drive
   version: 0.1.1
   kind: app
-  title: { en: OpenList }
+  title: { zh: 网盘合集（OpenList）, en: Cloud Drive Hub (OpenList) }
   description:
-    zh: 把各家网盘聚合挂载到一个网页，浏览、播放、上传下载
-    en: Mount your cloud drives into one web page to browse, stream, upload and download
+    zh: 把你在阿里云盘、百度网盘、夸克等各家网盘里的文件放进同一个网页：一处浏览、在线播放、上传下载。适合网盘账号开了好几个、想一处管的人。
+    en: "Brings Aliyun Drive, Baidu Netdisk, Quark and your other cloud drives into one web page: browse, stream and upload or download in one place. For anyone juggling several cloud drive accounts."
   icon: icon.svg
   notices: [NOTICE]
   screenshots: [screenshots/files.png, screenshots/folder.png, screenshots/manage.png]
@@ -68,13 +68,13 @@ x-wonton:
     en: [Files, Cloud drives]
   about:
     zh: |
-      把阿里云盘、夸克、百度网盘这些网盘挂到同一个网页里：浏览、在线播放、上传下载、离线下载都在一个界面。
+      把阿里云盘、夸克、百度网盘这些网盘放进同一个网页：浏览、在线播放、上传下载、离线下载都在一个界面。
 
       打开就是你自己的管理员账号，不用再记一个密码；网盘账号在家里添加，数据不经过任何第三方服务器。
 
       与 Alist 的关系：OpenList 是 Alist v3 的社区延续分支，由原社区在 Alist 项目易主后继续维护。
     en: |
-      Mount cloud drives such as Aliyun Drive, Quark and Baidu Netdisk into one web page: browse, stream, upload, download and fetch offline files in a single interface.
+      Put cloud drives such as Aliyun Drive, Quark and Baidu Netdisk into one web page: browse, stream, upload, download and fetch files for later, all in one place.
 
       It opens straight into your own admin account, with no extra password. Drive accounts are added at home, and your data goes through no third-party server.
 
